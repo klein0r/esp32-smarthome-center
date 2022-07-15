@@ -17,41 +17,113 @@
 #include "AudioTools.h"
 #include "AudioLibs/AudioKit.h"
 
+#include <WiFi.h>
+#include <WiFiClient.h>
+#include <PubSubClient.h>
+
+// Replace the next variables with your SSID/Password combination
+const char* ssid = "";
+const char* password = "";
+const char* mqtt_server = "172.16.0.5";
+const char* mqtt_user =  "";
+const char* mqtt_password = "";
+
 const char *startFilePath = "/";
 const char* ext = "mp3";
 int speedMz = 10;
+
+WiFiClient net;
+PubSubClient client(net);
+
 AudioSourceSdFat source(startFilePath, ext, PIN_AUDIO_KIT_SD_CARD_CS, speedMz);
 AudioKitStream kit;
 MP3DecoderHelix decoder; // or change to MP3DecoderMAD
 AudioPlayer player(source, kit, decoder);
 
-void next(bool, int, void*) {
-   player.next();
+void setup_wifi() {
+  delay(10);
+  // We start by connecting to a WiFi network
+  Serial.println();
+  Serial.print("Connecting to ");
+  Serial.println(ssid);
+
+  WiFi.begin(ssid, password);
+
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+
+  Serial.println("WiFi connected");
+  Serial.println("IP address: ");
+  Serial.println(WiFi.localIP());
 }
 
-void previous(bool, int, void*) {
-   player.previous();
+void callback(char* topic, byte* message, unsigned int length) {
+  Serial.print("Message arrived on topic: ");
+  Serial.print(topic);
+  Serial.print(". Message: ");
+  String messageTemp;
+
+  for (int i = 0; i < length; i++) {
+    Serial.print((char)message[i]);
+    messageTemp += (char)message[i];
+  }
+  Serial.println();
+
+  if (String(topic) == "esp32/output") {
+    if (messageTemp == "on") {
+      Serial.println("on");
+
+      player.setIndex(1);
+      player.begin();
+    }
+  }
 }
 
 void setup() {
   Serial.begin(115200);
-  AudioLogger::instance().begin(Serial, AudioLogger::Info);
+  AudioLogger::instance().begin(Serial, AudioLogger::Warning);
+
+  setup_wifi();
+  client.setServer(mqtt_server, 1883);
+  client.setCallback(callback);
 
   // setup output
   auto cfg = kit.defaultConfig(TX_MODE);
   kit.begin(cfg);
-
-  // setup additional buttons 
-  kit.setVolume(1.0);
-  kit.addAction(PIN_KEY4, next);
-  kit.addAction(PIN_KEY3, previous);
+  kit.setVolume(50);
 
   // setup player
-  player.setVolume(1.0);
-  player.begin();
+  player.setVolume(0.5);
+}
+
+void reconnect() {
+  // Loop until we're reconnected
+  while (!client.connected()) {
+    Serial.print("Attempting MQTT connection...");
+
+    if (client.connect("smartcenter-esp", mqtt_user, mqtt_password)) {
+      Serial.println("connected");
+      client.subscribe("esp32/output");
+    } else {
+      Serial.print("failed, rc=");
+      Serial.print(client.state());
+      Serial.println(" try again in 5 seconds");
+
+      // Wait 5 seconds before retrying
+      delay(5000);
+    }
+  }
 }
 
 void loop() {
-  player.copy();
-  kit.processActions();
+  if (!client.connected()) {
+    reconnect();
+  }
+  client.loop();
+
+  if (player.isActive()) {
+    player.copy();
+  }
 }

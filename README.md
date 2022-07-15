@@ -32,7 +32,7 @@ Hard resetting via RTS pin...
 ## SD-Card
 
 - Format as exFAT
-- Copy mp3 files to the SD-Card
+- Copy mp3 files and configuration file to the SD-Card
 
 ## Dependencies
 
@@ -40,3 +40,4 @@ Hard resetting via RTS pin...
 - https://github.com/pschatzmann/arduino-audiokit/tree/v0.6.0
 - https://github.com/pschatzmann/arduino-libhelix/tree/v0.7
 - https://github.com/greiman/SdFat/tree/2.2.0
+- https://github.com/knolleary/pubsubclient/tree/v2.8
