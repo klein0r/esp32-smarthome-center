@@ -11,6 +11,16 @@
 #define AUDIOKIT_BOARD 5
 #define SD_FAT_TYPE 2 // 1 for FAT16/FAT32, 2 for exFAT, 3 for FAT16/FAT32 and exFAT.
 #define AI_THINKER_ES8388_VOLUME_HACK 1
+#define LED_GPIO 19
+
+#define WIFI_SSID ""
+#define WIFI_PASSWORD ""
+#define MQTT_SERVER "172.16.0.5"
+#define MQTT_USER "esp"
+#define MQTT_PASSWORD ""
+#define MQTT_TOPIC "home/security/contact/reed/doorbell"
+
+// ------------------------------------------------------
 
 #define USE_SDFAT
 #define USE_HELIX // or USE_MAD
@@ -20,13 +30,6 @@
 #include <WiFi.h>
 #include <WiFiClient.h>
 #include <PubSubClient.h>
-
-// Replace the next variables with your SSID/Password combination
-const char* ssid = "";
-const char* password = "";
-const char* mqtt_server = "172.16.0.5";
-const char* mqtt_user =  "";
-const char* mqtt_password = "";
 
 const char *startFilePath = "/";
 const char* ext = "mp3";
@@ -45,9 +48,9 @@ void setup_wifi() {
   // We start by connecting to a WiFi network
   Serial.println();
   Serial.print("Connecting to ");
-  Serial.println(ssid);
+  Serial.println(WIFI_SSID);
 
-  WiFi.begin(ssid, password);
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
 
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
@@ -71,7 +74,7 @@ void callback(char* topic, byte* message, unsigned int length) {
   }
   Serial.println();
 
-  if (String(topic) == "esp32/output") {
+  if (String(topic) == MQTT_TOPIC) {
     if (messageTemp == "on") {
       Serial.println("on");
 
@@ -86,7 +89,7 @@ void setup() {
   AudioLogger::instance().begin(Serial, AudioLogger::Warning);
 
   setup_wifi();
-  client.setServer(mqtt_server, 1883);
+  client.setServer(MQTT_SERVER, 1883);
   client.setCallback(callback);
 
   // setup output
@@ -96,6 +99,9 @@ void setup() {
 
   // setup player
   player.setVolume(0.5);
+
+  pinMode(LED_GPIO, OUTPUT);
+  digitalWrite(LED_GPIO, HIGH);
 }
 
 void reconnect() {
@@ -103,9 +109,11 @@ void reconnect() {
   while (!client.connected()) {
     Serial.print("Attempting MQTT connection...");
 
-    if (client.connect("smartcenter-esp", mqtt_user, mqtt_password)) {
+    if (client.connect("smartcenter-esp", MQTT_USER, MQTT_PASSWORD)) {
+      digitalWrite(LED_GPIO, LOW);
+
       Serial.println("connected");
-      client.subscribe("esp32/output");
+      client.subscribe(MQTT_TOPIC);
     } else {
       Serial.print("failed, rc=");
       Serial.print(client.state());
@@ -119,11 +127,10 @@ void reconnect() {
 
 void loop() {
   if (!client.connected()) {
+    digitalWrite(LED_GPIO, HIGH);
     reconnect();
   }
   client.loop();
 
-  if (player.isActive()) {
-    player.copy();
-  }
+  player.copy();
 }
