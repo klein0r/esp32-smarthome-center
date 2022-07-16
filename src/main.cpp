@@ -84,6 +84,11 @@ void callback(char* topic, byte* message, unsigned int length) {
   }
 }
 
+void playDoorbellSound(bool, int, void*) {
+    player.setIndex(1);
+    player.begin();
+}
+
 void setup() {
   Serial.begin(115200);
   AudioLogger::instance().begin(Serial, AudioLogger::Warning);
@@ -96,6 +101,7 @@ void setup() {
   auto cfg = kit.defaultConfig(TX_MODE);
   kit.begin(cfg);
   kit.setVolume(50);
+  kit.addAction(PIN_KEY4, playDoorbellSound);
 
   // setup player
   player.setVolume(0.5);
@@ -133,4 +139,5 @@ void loop() {
   client.loop();
 
   player.copy();
+  kit.processActions();
 }
