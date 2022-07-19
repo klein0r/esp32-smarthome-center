@@ -18,13 +18,15 @@
 #define MQTT_SERVER "172.16.0.5"
 #define MQTT_USER "esp"
 #define MQTT_PASSWORD ""
-#define MQTT_TOPIC "home/security/contact/reed/doorbell"
+#define MQTT_TOPIC_DOORBELL "home/security/contact/reed/doorbell"
+#define MQTT_TOPIC_URLSOURCE "esp32/urlsource"
 
 // ------------------------------------------------------
 
 #define USE_SDFAT
-#define USE_HELIX // or USE_MAD
+#define USE_MAD // #define USE_HELIX
 #include "AudioTools.h"
+#include "AudioCodecs/CodecMP3MAD.h" // #include "AudioCodecs/CodecMP3Helix.h"
 #include "AudioLibs/AudioKit.h"
 
 #include <WiFi.h>
@@ -38,28 +40,20 @@ int speedMz = 10;
 WiFiClient net;
 PubSubClient client(net);
 
-AudioSourceSdFat source(startFilePath, ext, PIN_AUDIO_KIT_SD_CARD_CS, speedMz);
 AudioKitStream kit;
-MP3DecoderHelix decoder; // or change to MP3DecoderMAD
-AudioPlayer player(source, kit, decoder);
 
-void setup_wifi() {
-  delay(10);
-  // We start by connecting to a WiFi network
-  Serial.println();
-  Serial.print("Connecting to ");
-  Serial.println(WIFI_SSID);
+URLStream urlStream(WIFI_SSID, WIFI_PASSWORD);
+EncodedAudioStream dec(&kit, new MP3DecoderMAD()); // EncodedAudioStream dec(&kit, new MP3DecoderHelix());
+StreamCopy copier(dec, urlStream);
 
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+void playUrl(const char* url) {
+  dec.begin();
+  urlStream.begin(url, "audio/mp3");
+  copier.copyAll(5, 1000);
 
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
-  }
-
-  Serial.println("WiFi connected");
-  Serial.println("IP address: ");
-  Serial.println(WiFi.localIP());
+  urlStream.end();
+  dec.end();
+  // kit.end();
 }
 
 void callback(char* topic, byte* message, unsigned int length) {
@@ -74,37 +68,48 @@ void callback(char* topic, byte* message, unsigned int length) {
   }
   Serial.println();
 
-  if (String(topic) == MQTT_TOPIC) {
+  if (String(topic) == MQTT_TOPIC_DOORBELL) {
     if (messageTemp == "on") {
-      Serial.println("on");
-
-      player.setIndex(1);
-      player.begin();
+      
     }
+  } else if (String(topic) == MQTT_TOPIC_URLSOURCE) {
+    playUrl(messageTemp.c_str());
   }
-}
-
-void playDoorbellSound(bool, int, void*) {
-    player.setIndex(1);
-    player.begin();
 }
 
 void setup() {
   Serial.begin(115200);
   AudioLogger::instance().begin(Serial, AudioLogger::Warning);
 
-  setup_wifi();
-  client.setServer(MQTT_SERVER, 1883);
-  client.setCallback(callback);
+  AudioKitStreamConfig cfg = kit.defaultConfig(TX_MODE);
+  cfg.sample_rate = 24000;
+  cfg.channels = 1;
+  // cfg.bits_per_sample = 16
 
-  // setup output
-  auto cfg = kit.defaultConfig(TX_MODE);
   kit.begin(cfg);
   kit.setVolume(50);
-  kit.addAction(PIN_KEY4, playDoorbellSound);
 
-  // setup player
-  player.setVolume(0.5);
+  // Setup MQTT
+  delay(10);
+
+  // We start by connecting to a WiFi network
+  Serial.println();
+  Serial.print("Connecting to SSID: ");
+  Serial.println(WIFI_SSID);
+
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+
+  Serial.println("WiFi connected");
+  Serial.println("IP address: ");
+  Serial.println(WiFi.localIP());
+
+  client.setServer(MQTT_SERVER, 1883);
+  client.setCallback(callback);
 
   pinMode(LED_GPIO, OUTPUT);
   digitalWrite(LED_GPIO, HIGH);
@@ -119,7 +124,8 @@ void reconnect() {
       digitalWrite(LED_GPIO, LOW);
 
       Serial.println("connected");
-      client.subscribe(MQTT_TOPIC);
+      client.subscribe(MQTT_TOPIC_DOORBELL);
+      client.subscribe(MQTT_TOPIC_URLSOURCE);
     } else {
       Serial.print("failed, rc=");
       Serial.print(client.state());
@@ -138,6 +144,5 @@ void loop() {
   }
   client.loop();
 
-  player.copy();
   kit.processActions();
 }

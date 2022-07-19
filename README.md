@@ -38,6 +38,7 @@ Hard resetting via RTS pin...
 
 - https://github.com/pschatzmann/arduino-audio-tools/tree/v0.8.7
 - https://github.com/pschatzmann/arduino-audiokit/tree/v0.6.0
-- https://github.com/pschatzmann/arduino-libhelix/tree/v0.7
+- https://github.com/pschatzmann/arduino-libhelix/tree/v0.7 (mp3 decoder)
+- https://github.com/pschatzmann/arduino-libmad/tree/v0.7 (mp3 decoder)
 - https://github.com/greiman/SdFat/tree/2.2.0
 - https://github.com/knolleary/pubsubclient/tree/v2.8
