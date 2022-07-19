@@ -18,42 +18,59 @@
 #define MQTT_SERVER "172.16.0.5"
 #define MQTT_USER "esp"
 #define MQTT_PASSWORD ""
-#define MQTT_TOPIC_DOORBELL "home/security/contact/reed/doorbell"
+#define MQTT_TOPIC_DOORBELL "esp32/sdsource"
 #define MQTT_TOPIC_URLSOURCE "esp32/urlsource"
 
 // ------------------------------------------------------
 
 #define USE_SDFAT
-#define USE_MAD // #define USE_HELIX
+#define USE_HELIX // #define USE_MAD
 #include "AudioTools.h"
-#include "AudioCodecs/CodecMP3MAD.h" // #include "AudioCodecs/CodecMP3Helix.h"
+#include "AudioCodecs/CodecMP3Helix.h" // #include "AudioCodecs/CodecMP3MAD.h"
 #include "AudioLibs/AudioKit.h"
 
 #include <WiFi.h>
 #include <WiFiClient.h>
 #include <PubSubClient.h>
 
-const char *startFilePath = "/";
-const char* ext = "mp3";
-int speedMz = 10;
-
+// WiFi + MQTT
 WiFiClient net;
 PubSubClient client(net);
 
 AudioKitStream kit;
+EncodedAudioStream dec(&kit, new MP3DecoderHelix()); // EncodedAudioStream dec(&kit, new MP3DecoderMAD());
 
+// URL streaming
 URLStream urlStream(WIFI_SSID, WIFI_PASSWORD);
-EncodedAudioStream dec(&kit, new MP3DecoderMAD()); // EncodedAudioStream dec(&kit, new MP3DecoderHelix());
-StreamCopy copier(dec, urlStream);
+StreamCopy copierUrl(dec, urlStream);
+
+// SD card
+const char *startFilePath = "/";
+const char* ext = "mp3";
+int speedMz = 10;
+
+AudioSourceSdFat source(startFilePath, ext, PIN_AUDIO_KIT_SD_CARD_CS, speedMz);
+StreamCopy copierSd;
 
 void playUrl(const char* url) {
   dec.begin();
   urlStream.begin(url, "audio/mp3");
-  copier.copyAll(5, 1000);
+  copierUrl.copyAll(5, 1000);
 
   urlStream.end();
   dec.end();
-  // kit.end();
+}
+
+void playSdIndex(int index) {
+  dec.begin();
+  source.begin(); // Init SD
+
+  Stream* inputStream = source.selectStream(index);
+
+  copierSd.begin(dec, *inputStream);
+  copierSd.copyAll();
+
+  dec.end();
 }
 
 void callback(char* topic, byte* message, unsigned int length) {
@@ -70,7 +87,7 @@ void callback(char* topic, byte* message, unsigned int length) {
 
   if (String(topic) == MQTT_TOPIC_DOORBELL) {
     if (messageTemp == "on") {
-      
+      playSdIndex(0);
     }
   } else if (String(topic) == MQTT_TOPIC_URLSOURCE) {
     playUrl(messageTemp.c_str());

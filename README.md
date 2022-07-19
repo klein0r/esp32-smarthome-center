@@ -34,6 +34,8 @@ Hard resetting via RTS pin...
 - Format as exFAT
 - Copy mp3 files and configuration file to the SD-Card
 
+Requirements: 64 kbps / 24kHz / Mono (you can convert your files by using https://onlineaudioconverter.com)
+
 ## Dependencies
 
 - https://github.com/pschatzmann/arduino-audio-tools/tree/v0.8.7
