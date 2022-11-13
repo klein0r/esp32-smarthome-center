@@ -33,6 +33,10 @@
 #include <WiFiClient.h>
 #include <PubSubClient.h>
 
+TaskHandle_t taskHandlePlayAudioURL = NULL;
+
+String urlToPlayFrom;
+
 // WiFi + MQTT
 WiFiClient net;
 PubSubClient client(net);
@@ -52,13 +56,25 @@ int speedMz = 10;
 AudioSourceSdFat source(startFilePath, ext, PIN_AUDIO_KIT_SD_CARD_CS, speedMz);
 StreamCopy copierSd;
 
-void playUrl(const char* url) {
+void playUrl(void* url) {
+  Serial.print("Playing-Task is running on Core: ");
+  Serial.println(xPortGetCoreID());
+
+  const char* urlToPlay = (*((String*)url)).c_str();
+
+  // Play the audio from URL
   dec.begin();
-  urlStream.begin(url, "audio/mp3");
+  urlStream.begin(urlToPlay, "audio/mp3");
   copierUrl.copyAll(5, 1000);
 
   urlStream.end();
   dec.end();
+
+  // Delete task
+  Serial.println("Finished playing");
+  Serial.print("Free Stack-Size for this task: ");
+  Serial.println(uxTaskGetStackHighWaterMark(NULL));
+  vTaskDelete(NULL);
 }
 
 void playSdIndex(int index) {
@@ -90,7 +106,9 @@ void callback(char* topic, byte* message, unsigned int length) {
       playSdIndex(0);
     }
   } else if (String(topic) == MQTT_TOPIC_URLSOURCE) {
-    playUrl(messageTemp.c_str());
+    Serial.println("Playing from URL");
+    urlToPlayFrom = messageTemp;
+    xTaskCreate(playUrl, "Play sound from URL", 3072, (void*)&urlToPlayFrom, 1, &taskHandlePlayAudioURL);
   }
 }
 
