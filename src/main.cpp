@@ -34,8 +34,10 @@
 #include <PubSubClient.h>
 
 TaskHandle_t taskHandlePlayAudioURL = NULL;
+TaskHandle_t taskHandlePlayAudioSD = NULL;
 
 String urlToPlayFrom;
+int sdCardIndexToPlay;
 
 // WiFi + MQTT
 WiFiClient net;
@@ -77,16 +79,28 @@ void playUrl(void* url) {
   vTaskDelete(NULL);
 }
 
-void playSdIndex(int index) {
+void playSdIndex(void* index) {
+  Serial.print("Playing-Task is running on Core: ");
+  Serial.println(xPortGetCoreID());
+
+  int indexToPlay = *((int*)index);
+
+  // Play the audio from SD
   dec.begin();
   source.begin(); // Init SD
 
-  Stream* inputStream = source.selectStream(index);
+  Stream* inputStream = source.selectStream(indexToPlay);
 
   copierSd.begin(dec, *inputStream);
   copierSd.copyAll();
 
   dec.end();
+
+  // Delete task
+  Serial.println("Finished playing");
+  Serial.print("Free Stack-Size for this task: ");
+  Serial.println(uxTaskGetStackHighWaterMark(NULL));
+  vTaskDelete(NULL);
 }
 
 void callback(char* topic, byte* message, unsigned int length) {
@@ -103,7 +117,9 @@ void callback(char* topic, byte* message, unsigned int length) {
 
   if (String(topic) == MQTT_TOPIC_DOORBELL) {
     if (messageTemp == "on") {
-      playSdIndex(0);
+      Serial.println("Playing from SD");
+      sdCardIndexToPlay = 0;
+      xTaskCreate(playSdIndex, "Play sound from SD", 3072, (void*)&sdCardIndexToPlay, 1, &taskHandlePlayAudioSD);
     }
   } else if (String(topic) == MQTT_TOPIC_URLSOURCE) {
     Serial.println("Playing from URL");
