@@ -20,6 +20,8 @@
 #define MQTT_PASSWORD ""
 #define MQTT_TOPIC_DOORBELL "esp32/sdsource"
 #define MQTT_TOPIC_URLSOURCE "esp32/urlsource"
+#define MQTT_TOPIC_VOLUME "esp32/volume"
+#define MQTT_TOPIC_STOP "esp32/stop"
 
 // ------------------------------------------------------
 
@@ -32,6 +34,12 @@
 #include <WiFi.h>
 #include <WiFiClient.h>
 #include <PubSubClient.h>
+
+TaskHandle_t taskHandlePlayAudioURL = NULL;
+TaskHandle_t taskHandlePlayAudioSD = NULL;
+
+String urlToPlayFrom;
+int sdCardIndexToPlay;
 
 // WiFi + MQTT
 WiFiClient net;
@@ -52,25 +60,49 @@ int speedMz = 10;
 AudioSourceSdFat source(startFilePath, ext, PIN_AUDIO_KIT_SD_CARD_CS, speedMz);
 StreamCopy copierSd;
 
-void playUrl(const char* url) {
+void playUrl(void* url) {
+  Serial.print("Playing-Task is running on Core: ");
+  Serial.println(xPortGetCoreID());
+
+  const char* urlToPlay = (*((String*)url)).c_str();
+
+  // Play the audio from URL
   dec.begin();
-  urlStream.begin(url, "audio/mp3");
+  urlStream.begin(urlToPlay, "audio/mp3");
   copierUrl.copyAll(5, 1000);
 
   urlStream.end();
   dec.end();
+
+  // Delete task
+  Serial.println("Finished playing");
+  Serial.print("Free Stack-Size for this task: ");
+  Serial.println(uxTaskGetStackHighWaterMark(NULL));
+  vTaskDelete(NULL);
 }
 
-void playSdIndex(int index) {
+void playSdIndex(void* index) {
+  Serial.print("Playing-Task is running on Core: ");
+  Serial.println(xPortGetCoreID());
+
+  int indexToPlay = *((int*)index);
+
+  // Play the audio from SD
   dec.begin();
   source.begin(); // Init SD
 
-  Stream* inputStream = source.selectStream(index);
+  Stream* inputStream = source.selectStream(indexToPlay);
 
   copierSd.begin(dec, *inputStream);
   copierSd.copyAll();
 
   dec.end();
+
+  // Delete task
+  Serial.println("Finished playing");
+  Serial.print("Free Stack-Size for this task: ");
+  Serial.println(uxTaskGetStackHighWaterMark(NULL));
+  vTaskDelete(NULL);
 }
 
 void callback(char* topic, byte* message, unsigned int length) {
@@ -85,12 +117,40 @@ void callback(char* topic, byte* message, unsigned int length) {
   }
   Serial.println();
 
+  // Execute MQTT-command
   if (String(topic) == MQTT_TOPIC_DOORBELL) {
     if (messageTemp == "on") {
-      playSdIndex(0);
+      Serial.println("Playing from SD");
+      sdCardIndexToPlay = 0;
+      xTaskCreate(playSdIndex, "Play sound from SD", 3072, (void*)&sdCardIndexToPlay, 1, &taskHandlePlayAudioSD);
     }
-  } else if (String(topic) == MQTT_TOPIC_URLSOURCE) {
-    playUrl(messageTemp.c_str());
+  }
+  else if (String(topic) == MQTT_TOPIC_URLSOURCE) {
+    Serial.println("Playing from URL");
+    urlToPlayFrom = messageTemp;
+    xTaskCreate(playUrl, "Play sound from URL", 3072, (void*)&urlToPlayFrom, 1, &taskHandlePlayAudioURL);
+  }
+  else if (String(topic) == MQTT_TOPIC_VOLUME) {
+    Serial.println("Setting Volume");
+    kit.setVolume(messageTemp.toInt());
+  }
+  else if (String(topic) == MQTT_TOPIC_STOP) {
+    if(taskHandlePlayAudioURL != NULL) {
+      Serial.println("Stopping playing -> reboot");
+      vTaskDelete(taskHandlePlayAudioURL);
+      urlStream.end();
+      dec.end();
+      ESP.restart();
+    } else if (taskHandlePlayAudioSD != NULL) {
+      Serial.println("Stopping playing -> reboot");
+      vTaskDelete(taskHandlePlayAudioSD);
+      urlStream.end();
+      dec.end();
+      ESP.restart();
+    }
+    else {
+      Serial.println("Not playing");
+    }
   }
 }
 
@@ -143,6 +203,8 @@ void reconnect() {
       Serial.println("connected");
       client.subscribe(MQTT_TOPIC_DOORBELL);
       client.subscribe(MQTT_TOPIC_URLSOURCE);
+      client.subscribe(MQTT_TOPIC_VOLUME);
+      client.subscribe(MQTT_TOPIC_STOP);
     } else {
       Serial.print("failed, rc=");
       Serial.print(client.state());
