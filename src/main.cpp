@@ -13,18 +13,6 @@
 #define AI_THINKER_ES8388_VOLUME_HACK 1
 #define LED_GPIO 19
 
-#define WIFI_SSID ""
-#define WIFI_PASSWORD ""
-#define MQTT_SERVER "172.16.0.5"
-#define MQTT_USER "esp"
-#define MQTT_PASSWORD ""
-#define MQTT_TOPIC_DOORBELL "esp32/sdsource"
-#define MQTT_TOPIC_URLSOURCE "esp32/urlsource"
-#define MQTT_TOPIC_VOLUME "esp32/volume"
-#define MQTT_TOPIC_STOP "esp32/stop"
-
-// ------------------------------------------------------
-
 #define USE_SDFAT
 #define USE_HELIX // #define USE_MAD
 #include "AudioTools.h"
@@ -34,6 +22,7 @@
 #include <WiFi.h>
 #include <WiFiClient.h>
 #include <PubSubClient.h>
+#include <credentials.h>
 
 TaskHandle_t taskHandlePlayAudioURL = NULL;
 TaskHandle_t taskHandlePlayAudioSD = NULL;
@@ -57,7 +46,7 @@ const char *startFilePath = "/";
 const char* ext = "mp3";
 int speedMz = 10;
 
-AudioSourceSdFat source(startFilePath, ext, PIN_AUDIO_KIT_SD_CARD_CS, speedMz);
+AudioSourceSDFAT source(startFilePath, ext, PIN_AUDIO_KIT_SD_CARD_CS, speedMz);
 StreamCopy copierSd;
 
 void playUrl(void* url) {
@@ -124,18 +113,15 @@ void callback(char* topic, byte* message, unsigned int length) {
       sdCardIndexToPlay = 0;
       xTaskCreate(playSdIndex, "Play sound from SD", 3072, (void*)&sdCardIndexToPlay, 1, &taskHandlePlayAudioSD);
     }
-  }
-  else if (String(topic) == MQTT_TOPIC_URLSOURCE) {
+  } else if (String(topic) == MQTT_TOPIC_URLSOURCE) {
     Serial.println("Playing from URL");
     urlToPlayFrom = messageTemp;
     xTaskCreate(playUrl, "Play sound from URL", 3072, (void*)&urlToPlayFrom, 1, &taskHandlePlayAudioURL);
-  }
-  else if (String(topic) == MQTT_TOPIC_VOLUME) {
+  } else if (String(topic) == MQTT_TOPIC_VOLUME) {
     Serial.println("Setting Volume");
-    kit.setVolume(messageTemp.toInt());
-  }
-  else if (String(topic) == MQTT_TOPIC_STOP) {
-    if(taskHandlePlayAudioURL != NULL) {
+    kit.setVolume((int)messageTemp.toInt());
+  } else if (String(topic) == MQTT_TOPIC_STOP) {
+    if (taskHandlePlayAudioURL != NULL) {
       Serial.println("Stopping playing -> reboot");
       vTaskDelete(taskHandlePlayAudioURL);
       urlStream.end();

@@ -1,5 +1,11 @@
 # ESP32 SmartHome Center
 
+## How to start
+
+1. ``cp ./credentials.h.dist ./src/credentials.h``
+2. Modify ``./src/credentials.h``
+3. Build and upload
+
 ## Hardware
 
 Based on [ESP32-A1S-AudioKit](https://docs.ai-thinker.com/en/esp32-audio-kit)
@@ -38,9 +44,9 @@ Requirements: 64 kbps / 24kHz / Mono (you can convert your files by using https:
 
 ## Dependencies
 
-- https://github.com/pschatzmann/arduino-audio-tools/tree/v0.8.7
-- https://github.com/pschatzmann/arduino-audiokit/tree/v0.6.0
-- https://github.com/pschatzmann/arduino-libhelix/tree/v0.7 (mp3 decoder)
+- https://github.com/pschatzmann/arduino-audio-tools/tree/v0.9.4
+- https://github.com/pschatzmann/arduino-audiokit/tree/v0.6.3
+- https://github.com/pschatzmann/arduino-libhelix/tree/v0.8 (mp3 decoder)
 - https://github.com/pschatzmann/arduino-libmad/tree/v0.7 (mp3 decoder)
 - https://github.com/greiman/SdFat/tree/2.2.0
 - https://github.com/knolleary/pubsubclient/tree/v2.8
